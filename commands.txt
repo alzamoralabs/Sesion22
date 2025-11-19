@@ -1,0 +1,143 @@
+// ============================================
+// CREACIÓN DE BASE DE DATOS DE GRAFOS EN NEO4J
+// Basado en el diagrama: Dan, Ann, Volvo V70
+// ============================================
+
+// 1. LIMPIAR DATOS PREVIOS (opcional)
+MATCH (n) DETACH DELETE n;
+
+// 2. CREAR NODOS DE PERSONAS
+CREATE (dan:Person {
+  name: "Dan",
+  birthDate: "1970-05-29",
+  twitter: "@dan",
+  age: 54
+})
+
+CREATE (ann:Person {
+  name: "Ann",
+  birthDate: "1975-12-05",
+  twitter: null,
+  age: 49
+})
+
+// 3. CREAR NODO DEL AUTOMÓVIL
+CREATE (volvo:Car {
+  brand: "Volvo",
+  model: "V70",
+  description: "An executive car manufactured and...",
+  descEmbedding: [0.1, -0.3, 0.4, -0.7],
+  descSource: "https://en.wikipedia.org/wiki/Volvo_V70",
+  year: 2011,
+  licensePlate: null
+})
+
+// 4. CREAR RELACIÓN: DAN KNOWS ANN
+MATCH (dan:Person {name: "Dan"}), (ann:Person {name: "Ann"})
+CREATE (dan)-[:KNOWS]->(ann)
+
+// 5. CREAR RELACIÓN: ANN KNOWS DAN
+MATCH (dan:Person {name: "Dan"}), (ann:Person {name: "Ann"})
+CREATE (ann)-[:KNOWS]->(dan)
+
+// 6. CREAR RELACIÓN: DAN LIVES_WITH ANN
+MATCH (dan:Person {name: "Dan"}), (ann:Person {name: "Ann"})
+CREATE (dan)-[:LIVES_WITH {since: "2011-01-10"}]->(ann)
+
+// 7. CREAR RELACIÓN: ANN LIVES_WITH DAN
+MATCH (dan:Person {name: "Dan"}), (ann:Person {name: "Ann"})
+CREATE (ann)-[:LIVES_WITH {since: "2011-01-10"}]->(dan)
+
+// 8. CREAR RELACIÓN: DAN DRIVES VOLVO
+MATCH (dan:Person {name: "Dan"}), (volvo:Car {model: "V70"})
+CREATE (dan)-[:DRIVES {since: "2011-01-10"}]->(volvo)
+
+// 9. CREAR RELACIÓN: ANN OWNS VOLVO
+MATCH (ann:Person {name: "Ann"}), (volvo:Car {model: "V70"})
+CREATE (ann)-[:OWNS {since: "2011-01-10"}]->(volvo)
+
+// ============================================
+// CREAR VIAJES (TRIPS)
+// ============================================
+
+// Crear nodos de destinos/ubicaciones
+CREATE (work:Location {name: "Trabajo", type: "Workplace"})
+CREATE (mall:Location {name: "Centro Comercial", type: "Shopping"})
+CREATE (gym:Location {name: "Gimnasio", type: "Fitness"})
+
+// Crear registros de viajes
+MATCH (dan:Person {name: "Dan"}), (volvo:Car {model: "V70"}), (work:Location {name: "Trabajo"})
+CREATE (trip1:Trip {
+  tripId: "TRIP-001",
+  driver: "Dan",
+  destination: "Trabajo",
+  duration: 0.5,
+  timestamp: "2024-11-18T08:00:00Z",
+  distance: 12.5
+})
+CREATE (dan)-[:MADE_TRIP]->(trip1)
+CREATE (trip1)-[:USING_CAR]->(volvo)
+CREATE (trip1)-[:DESTINATION]->(work)
+
+MATCH (ann:Person {name: "Ann"}), (volvo:Car {model: "V70"}), (mall:Location {name: "Centro Comercial"})
+CREATE (trip2:Trip {
+  tripId: "TRIP-002",
+  driver: "Ann",
+  destination: "Centro Comercial",
+  duration: 1.5,
+  timestamp: "2024-11-18T10:30:00Z",
+  distance: 25.0
+})
+CREATE (ann)-[:MADE_TRIP]->(trip2)
+CREATE (trip2)-[:USING_CAR]->(volvo)
+CREATE (trip2)-[:DESTINATION]->(mall)
+
+MATCH (dan:Person {name: "Dan"}), (volvo:Car {model: "V70"}), (gym:Location {name: "Gimnasio"})
+CREATE (trip3:Trip {
+  tripId: "TRIP-003",
+  driver: "Dan",
+  destination: "Gimnasio",
+  duration: 0.75,
+  timestamp: "2024-11-18T18:00:00Z",
+  distance: 8.3
+})
+CREATE (dan)-[:MADE_TRIP]->(trip3)
+CREATE (trip3)-[:USING_CAR]->(volvo)
+CREATE (trip3)-[:DESTINATION]->(gym)
+
+// ============================================
+// CREAR ÍNDICES PARA OPTIMIZACIÓN
+// ============================================
+
+CREATE INDEX person_name IF NOT EXISTS FOR (p:Person) ON (p.name);
+CREATE INDEX car_model IF NOT EXISTS FOR (c:Car) ON (c.model);
+CREATE INDEX trip_id IF NOT EXISTS FOR (t:Trip) ON (t.tripId);
+CREATE INDEX location_name IF NOT EXISTS FOR (l:Location) ON (l.name);
+
+// ============================================
+// CONSULTAS DE VERIFICACIÓN
+// ============================================
+
+// Ver toda la estructura creada
+MATCH (n) RETURN n;
+
+// Ver relaciones entre Dan y Ann
+MATCH (dan:Person {name: "Dan"})-[r]-(ann:Person {name: "Ann"})
+RETURN dan.name, TYPE(r) as relationType, ann.name;
+
+// Ver todos los viajes
+MATCH (person:Person)-[:MADE_TRIP]->(trip:Trip)-[:USING_CAR]->(car:Car)
+RETURN person.name as conductor, trip.tripId, trip.destination, trip.duration, car.model;
+
+// Ver conductores del Volvo
+MATCH (person:Person)-[:DRIVES|OWNS]->(car:Car {model: "V70"})
+RETURN person.name, person.age, TYPE(r) as relationType;
+
+// Ver destinos visitados
+MATCH (trip:Trip)-[:DESTINATION]->(location:Location)
+RETURN location.name, COUNT(trip) as visitCount, SUM(trip.distance) as totalDistance;
+
+// Ver historial de uso del Volvo
+MATCH (driver:Person)-[:MADE_TRIP]->(trip:Trip)-[:USING_CAR]->(car:Car {model: "V70"})-[:OWNS]-(owner:Person)
+RETURN driver.name, trip.tripId, trip.destination, trip.duration, owner.name as propietario
+ORDER BY trip.timestamp;
